@@ -42,6 +42,8 @@ export default function Navbar() {
 
           <div className="hidden md:flex flex-1 justify-center space-x-8">
             <Link href="/#catalogo" className="font-medium hover:text-primary-600 dark:hover:text-primary-400 transition-colors">Catálogo</Link>
+            <Link href="/talleres" className="font-medium hover:text-primary-600 dark:hover:text-primary-400 transition-colors">Talleres</Link>
+            <Link href="/blog" className="font-medium hover:text-primary-600 dark:hover:text-primary-400 transition-colors">Blog</Link>
             <Link href="/comunidad" className="font-medium hover:text-primary-600 dark:hover:text-primary-400 transition-colors">Comunidad</Link>
             <Link href="#" className="font-medium hover:text-primary-600 dark:hover:text-primary-400 transition-colors">Nosotros</Link>
           </div>

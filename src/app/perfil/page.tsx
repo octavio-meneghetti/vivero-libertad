@@ -12,12 +12,14 @@ import Navbar from '@/components/layout/Navbar';
 import { useAuth } from '@/context/AuthContext';
 import { useFavorites } from '@/context/FavoritesContext';
 import { saveUserProfile, uploadAvatar, UserProfile, EMPTY_PROFILE } from '@/lib/userProfile';
+import { getBookingsByUser } from '@/lib/workshops';
 
 // ---------- Tipos ----------
 const TABS = [
   { id: 'datos',     icon: User,     label: 'Mis Datos' },
   { id: 'favoritas', icon: Heart,    label: 'Mis Favoritas' },
   { id: 'pedidos',   icon: Package,  label: 'Mis Pedidos' },
+  { id: 'talleres',  icon: Calendar, label: 'Mis Workshops' },
   { id: 'cuenta',    icon: Lock,     label: 'Mi Cuenta' },
 ];
 
@@ -80,6 +82,8 @@ export default function PerfilPage() {
   const [avatarPreview, setAvatarPreview] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [myBookings, setMyBookings] = useState<any[]>([]);
+  const [loadingBookings, setLoadingBookings] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { setMounted(true); }, []);
@@ -96,6 +100,17 @@ export default function PerfilPage() {
       setAvatarPreview(userProfile.avatarUrl || '');
     }
   }, [userProfile]);
+
+  // Cargar bookings cuando cambia el tab a talleres
+  useEffect(() => {
+    if (activeTab === 'talleres' && user) {
+      setLoadingBookings(true);
+      getBookingsByUser(user.uid)
+        .then(setMyBookings)
+        .catch(console.error)
+        .finally(() => setLoadingBookings(false));
+    }
+  }, [activeTab, user]);
 
   if (!mounted || loading || !user) {
     return (
@@ -404,6 +419,70 @@ export default function PerfilPage() {
                 >
                   Ver mis pedidos <ArrowRight className="w-4 h-4" />
                 </Link>
+              </div>
+            )}
+
+
+            {/* ── TAB: MIS WORKSHOPS ── */}
+            {activeTab === 'talleres' && (
+              <div className="p-6 md:p-8">
+                <SectionTitle><Calendar className="w-5 h-5" /> Mis Workshops</SectionTitle>
+                
+                {loadingBookings ? (
+                  <div className="flex flex-col items-center justify-center py-20 animate-pulse">
+                    <Calendar className="w-12 h-12 text-foreground/10 mb-2" />
+                    <p className="text-sm text-foreground/30">Cargando tus lugares...</p>
+                  </div>
+                ) : myBookings.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-20 text-center">
+                    <div className="w-20 h-20 bg-primary-50 dark:bg-primary-900/20 rounded-3xl flex items-center justify-center mb-4 text-primary-300">
+                      <Calendar className="w-10 h-10" />
+                    </div>
+                    <h3 className="text-xl font-display font-bold mb-2">Aún no te inscribiste en ningún taller</h3>
+                    <p className="text-foreground/60 max-w-sm mb-6">
+                      Aprendé cosas nuevas, conocé gente y conectá con la naturaleza en nuestras experiencias presenciales y online.
+                    </p>
+                    <Link
+                      href="/talleres"
+                      className="flex items-center gap-2 px-6 py-3 bg-primary-600 text-white rounded-2xl font-medium hover:bg-primary-700 transition-colors shadow-lg shadow-primary-500/20"
+                    >
+                      <Sparkles className="w-4 h-4 text-amber-300" /> Ver Agenda de Talleres
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {myBookings.map(b => (
+                      <div key={b.id} className="bg-white/50 dark:bg-black/20 rounded-2xl p-5 border border-black/5 flex flex-col justify-between">
+                        <div>
+                          <div className="flex justify-between items-start mb-2">
+                            <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-tight ${
+                              b.status === 'confirmado' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700 font-bold'
+                            }`}>
+                              {b.status === 'confirmado' ? 'Inscrito' : 'Pendiente de Pago'}
+                            </span>
+                            <span className="text-[10px] text-foreground/40 font-bold">
+                              {new Date(b.createdAt).toLocaleDateString()}
+                            </span>
+                          </div>
+                          <h4 className="font-bold text-lg leading-tight mb-1">{b.workshopTitle}</h4>
+                          <p className="text-xs text-foreground/60 flex items-center gap-1 mb-4">
+                            <Calendar className="w-3 h-3" /> {new Date(b.workshopDate).toLocaleDateString('es-AR', { day: 'numeric', month: 'long' })}
+                          </p>
+                        </div>
+                        
+                        <div className="pt-4 border-t border-black/5 flex items-center justify-between">
+                          <p className="text-xs font-bold">{b.slots} lugar(es)</p>
+                          <Link 
+                            href={`/talleres/${b.workshopId}`}
+                            className="text-xs font-bold text-primary-600 dark:text-primary-400 hover:underline flex items-center gap-1"
+                          >
+                            Ver detalle <ArrowRight className="w-3 h-3" />
+                          </Link>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 

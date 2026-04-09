@@ -6,6 +6,8 @@ export interface Product {
   category: 'interior' | 'exterior' | 'accesorios';
   image: string;
   badge?: string;
+  ratingAvg?: number;
+  reviewCount?: number;
 }
 
 export const catalogData: Product[] = [

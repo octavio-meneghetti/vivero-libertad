@@ -1,12 +1,17 @@
 import Navbar from '@/components/layout/Navbar';
 import HeroSection from '@/components/catalog/HeroSection';
 import ProductGrid from '@/components/catalog/ProductGrid';
+import TopRatedSection from '@/components/catalog/TopRatedSection';
 
 export default function Home() {
   return (
     <main className="min-h-screen">
       <Navbar />
       <HeroSection />
+      
+      {/* Sección dinámica de los más valorados */}
+      <TopRatedSection />
+      
       <ProductGrid />
       
       <footer className="border-t border-black/5 dark:border-white/5 py-12 mt-20">

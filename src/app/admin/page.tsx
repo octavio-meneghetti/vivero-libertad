@@ -4,14 +4,14 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/layout/Navbar';
-import { Upload, Plus, Save, Image as ImageIcon, CheckCircle, ChevronRight, Edit3, Trash2, Package, User, MapPin, MessageCircle, ChevronDown } from 'lucide-react';
+import { Upload, Plus, Save, Image as ImageIcon, CheckCircle, ChevronRight, Edit3, Trash2, Package, User, MapPin, MessageCircle, ChevronDown, BookOpen } from 'lucide-react';
 import { db, storage } from '@/lib/firebase';
-import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, where } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import * as B from '@/types/botanical';
 import { subscribeToAllOrders, updateOrderStatus, Order, OrderStatus, STATUS_LABELS, STATUS_COLORS } from '@/lib/orders';
 
-const TABS = ['📬 Pedidos', '📦 Inventario', 'Comercial', 'Identificación', 'Ambiental', 'Morfología', 'Ornamental', 'Ecología', '📋 Batch JSON'];
+const TABS = ['📬 Pedidos', '🗓️ Talleres', '📝 Artículos', '📦 Inventario', 'Comercial', 'Identificación', 'Ambiental', 'Morfología', 'Ornamental', 'Ecología', '📋 Batch JSON'];
 
 const INITIAL_STATE = {
   // Comercial
@@ -37,10 +37,21 @@ const INITIAL_STATE = {
   toxicaMascotas: false, toxicaHumanos: false, espinas: false
 };
 
+const INITIAL_WORKSHOP_STATE = {
+  title: '', description: '', image: '', date: '', duration: '',
+  price: '', capacity: '', instructor: '', type: 'presencial',
+  address: '', platform: '', meetingLink: '', requirements: ''
+};
+
+const INITIAL_POST_STATE = {
+  title: '', excerpt: '', coverImage: '', category: 'Guías Pro',
+  tags: '', status: 'draft', blocks: [] as any[]
+};
+
 const PLACEHOLDER_IMAGE = "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=1000";
 
 export default function AdminPage() {
-  const { user, isAdmin, loading } = useAuth();
+  const { user, isAdmin, loading, userProfile } = useAuth();
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [activeTab, setActiveTab] = useState(TABS[0]);
@@ -51,8 +62,16 @@ export default function AdminPage() {
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
 
   const [data, setData] = useState(INITIAL_STATE);
+  const [workshopData, setWorkshopData] = useState(INITIAL_WORKSHOP_STATE);
+  const [workshops, setWorkshops] = useState<any[]>([]);
+  const [selectedWorkshopBookings, setSelectedWorkshopBookings] = useState<any[]>([]);
+  const [viewingWorkshopId, setViewingWorkshopId] = useState<string | null>(null);
+  
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [jsonInput, setJsonInput] = useState('');
+  
+  const [posts, setPosts] = useState<any[]>([]);
+  const [blogData, setBlogData] = useState(INITIAL_POST_STATE);
   
   const [uploading, setUploading] = useState(false);
   const [success, setSuccess] = useState('');
@@ -84,6 +103,45 @@ export default function AdminPage() {
     if (!isAdmin) return;
     const unsub = subscribeToAllOrders(setOrders);
     return () => unsub();
+  }, [isAdmin]);
+
+  // Listener de Talleres
+  useEffect(() => {
+    if (isAdmin) {
+      const q = query(collection(db, 'workshops'), orderBy('date', 'asc'));
+      const unsub = onSnapshot(q, snap => {
+        setWorkshops(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      });
+      return () => unsub();
+    }
+  }, [isAdmin]);
+
+  // Listener de Inscriptos (cuando se selecciona un taller para ver)
+  useEffect(() => {
+    if (isAdmin && viewingWorkshopId) {
+      const q = query(
+        collection(db, 'workshop_bookings'),
+        where('workshopId', '==', viewingWorkshopId),
+        orderBy('createdAt', 'desc')
+      );
+      const unsub = onSnapshot(q, snap => {
+        setSelectedWorkshopBookings(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      });
+      return () => unsub();
+    } else {
+      setSelectedWorkshopBookings([]);
+    }
+  }, [isAdmin, viewingWorkshopId]);
+
+  // Listener de Blog (Artículos)
+  useEffect(() => {
+    if (isAdmin) {
+      const q = query(collection(db, 'blog_posts'), orderBy('createdAt', 'desc'));
+      const unsub = onSnapshot(q, snap => {
+        setPosts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      });
+      return () => unsub();
+    }
   }, [isAdmin]);
 
   const handleStatusChange = async (orderId: string, newStatus: OrderStatus) => {
@@ -216,6 +274,138 @@ export default function AdminPage() {
     } finally {
       setUploading(false);
     }
+  };
+
+  const handleWorkshopSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!workshopData.title || !workshopData.price || !workshopData.date) {
+      return alert("Completa título, fecha y precio.");
+    }
+
+    setUploading(true);
+    setSuccess('');
+
+    try {
+      let imageUrl = workshopData.image || PLACEHOLDER_IMAGE;
+      if (imageFile) {
+        const storageRef = ref(storage, `workshops/${Date.now()}_${imageFile.name}`);
+        const snapshot = await uploadBytes(storageRef, imageFile);
+        imageUrl = await getDownloadURL(snapshot.ref);
+      }
+
+      const payload = {
+        ...workshopData,
+        price: parseFloat(workshopData.price),
+        capacity: parseInt(workshopData.capacity, 10),
+        occupiedSpots: workshopData.id ? (workshops.find(w => w.id === workshopData.id)?.occupiedSpots || 0) : 0,
+        image: imageUrl,
+        updatedAt: new Date().toISOString()
+      };
+
+      if (workshopData.id) {
+        const { id, ...updateData } = payload;
+        await updateDoc(doc(db, "workshops", id), updateData);
+        setSuccess('¡Taller actualizado exitosamente!');
+      } else {
+        (payload as any).createdAt = new Date().toISOString();
+        await addDoc(collection(db, "workshops"), payload);
+        setSuccess('¡Nuevo taller creado!');
+      }
+
+      setWorkshopData(INITIAL_WORKSHOP_STATE);
+      setImageFile(null);
+      setEditingId(null);
+    } catch (e) {
+      console.error(e);
+      alert('Error al guardar el taller.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const updateBookingStatus = async (bookingId: string, status: string) => {
+    try {
+      await updateDoc(doc(db, 'workshop_bookings', bookingId), { status });
+      setSuccess('Estado de inscripción actualizado.');
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handlePostSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!blogData.title || !blogData.excerpt) {
+      return alert("El título y el resumen son obligatorios.");
+    }
+
+    setUploading(true);
+    setSuccess('');
+
+    try {
+      // Importar helpers de blog dinámicamente o por nombre
+      // Para evitar problemas de importación, usaré la lógica directa aquí
+      const generateSlug = (text: string) => text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').trim();
+      const calculateReadingTime = (blocks: any[]) => {
+        const text = blocks.filter(b => ['p', 'h2', 'h3'].includes(b.type)).map(b => b.content).join(' ');
+        return Math.max(1, Math.ceil(text.split(/\s+/).length / 200));
+      };
+
+      let coverUrl = blogData.coverImage || PLACEHOLDER_IMAGE;
+      if (imageFile) {
+        const storageRef = ref(storage, `blog/${Date.now()}_cover`);
+        const snapshot = await uploadBytes(storageRef, imageFile);
+        coverUrl = await getDownloadURL(snapshot.ref);
+      }
+
+      const payload = {
+        ...blogData,
+        coverImage: coverUrl,
+        slug: generateSlug(blogData.title),
+        readingTime: calculateReadingTime(blogData.blocks),
+        tags: (blogData.tags as string).split(',').map(t => t.trim()).filter(t => t),
+        author: userProfile?.displayName || user?.email?.split('@')[0] || 'Admin',
+        authorId: user?.uid || '',
+        updatedAt: new Date().toISOString()
+      };
+
+      if ((blogData as any).id) {
+        const { id, ...updateData } = payload as any;
+        await updateDoc(doc(db, 'blog_posts', id), updateData);
+        setSuccess('¡Artículo actualizado!');
+      } else {
+        (payload as any).createdAt = new Date().toISOString();
+        await addDoc(collection(db, 'blog_posts'), payload);
+        setSuccess('¡Artículo publicado!');
+      }
+
+      setBlogData(INITIAL_POST_STATE);
+      setImageFile(null);
+      setEditingId(null);
+    } catch (e) {
+      console.error(e);
+      alert('Error al guardar el artículo.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const addBlock = (type: any) => {
+    const newBlock = { id: Math.random().toString(36).substr(2, 9), type, content: '' };
+    setBlogData(prev => ({ ...prev, blocks: [...prev.blocks, newBlock] }));
+  };
+
+  const updateBlock = (id: string, content: string) => {
+    setBlogData(prev => ({
+      ...prev,
+      blocks: prev.blocks.map(b => b.id === id ? { ...b, content } : b)
+    }));
+  };
+
+  const removeBlock = (id: string) => {
+    setBlogData(prev => ({
+      ...prev,
+      blocks: prev.blocks.filter(b => b.id !== id)
+    }));
   };
 
 
@@ -418,8 +608,305 @@ export default function AdminPage() {
                 )}
               </div>
             )}
+            
+            {/* TAB: TALLERES */}
+            {activeTab === '🗓️ Talleres' && (
+              <div className="space-y-8">
+                <div className="flex flex-col md:flex-row gap-8">
+                  {/* Formulario de Taller */}
+                  <div className="flex-1 space-y-6">
+                    <h2 className="text-xl font-bold flex items-center gap-2 text-primary-600 dark:text-primary-400">
+                      {workshopData.id ? 'Editando Taller' : 'Crear Nuevo Taller'}
+                    </h2>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-foreground/70 mb-2">Título del Taller *</label>
+                        <input type="text" value={workshopData.title} onChange={e => setWorkshopData({...workshopData, title: e.target.value})} className="w-full px-4 py-3 rounded-xl bg-white/50 dark:bg-black/20 border border-black/10 focus:ring-2 focus:ring-primary-500" placeholder="Ej: Taller de Suculentas" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-foreground/70 mb-2">Instructor *</label>
+                        <input type="text" value={workshopData.instructor} onChange={e => setWorkshopData({...workshopData, instructor: e.target.value})} className="w-full px-4 py-3 rounded-xl bg-white/50 dark:bg-black/20 border border-black/10 focus:ring-2 focus:ring-primary-500" placeholder="Nombre del experto" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-foreground/70 mb-2">Precio ($) *</label>
+                        <input type="number" value={workshopData.price} onChange={e => setWorkshopData({...workshopData, price: e.target.value})} className="w-full px-4 py-3 rounded-xl bg-white/50 dark:bg-black/20 border border-black/10 focus:ring-2 focus:ring-primary-500" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-foreground/70 mb-2">Cupo Total *</label>
+                        <input type="number" value={workshopData.capacity} onChange={e => setWorkshopData({...workshopData, capacity: e.target.value})} className="w-full px-4 py-3 rounded-xl bg-white/50 dark:bg-black/20 border border-black/10 focus:ring-2 focus:ring-primary-500" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-foreground/70 mb-2">Fecha y Hora *</label>
+                        <input type="datetime-local" value={workshopData.date} onChange={e => setWorkshopData({...workshopData, date: e.target.value})} className="w-full px-4 py-3 rounded-xl bg-white/50 dark:bg-black/20 border border-black/10 focus:ring-2 focus:ring-primary-500" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-foreground/70 mb-2">Duración</label>
+                        <input type="text" value={workshopData.duration} onChange={e => setWorkshopData({...workshopData, duration: e.target.value})} className="w-full px-4 py-3 rounded-xl bg-white/50 dark:bg-black/20 border border-black/10 focus:ring-2 focus:ring-primary-500" placeholder="Ej: 2 horas" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-foreground/70 mb-2">Modalidad</label>
+                        <select value={workshopData.type} onChange={e => setWorkshopData({...workshopData, type: e.target.value as any})} className="w-full px-4 py-3 rounded-xl bg-white/50 dark:bg-black/20 border border-black/10 focus:ring-2 focus:ring-primary-500">
+                          <option value="presencial">📍 Presencial</option>
+                          <option value="online">🎥 Online</option>
+                        </select>
+                      </div>
+                      {workshopData.type === 'presencial' ? (
+                        <div>
+                          <label className="block text-xs font-bold uppercase tracking-wider text-foreground/70 mb-2">Dirección</label>
+                          <input type="text" value={workshopData.address} onChange={e => setWorkshopData({...workshopData, address: e.target.value})} className="w-full px-4 py-3 rounded-xl bg-white/50 dark:bg-black/20 border border-black/10 focus:ring-2 focus:ring-primary-500" />
+                        </div>
+                      ) : (
+                        <>
+                          <div>
+                            <label className="block text-xs font-bold uppercase tracking-wider text-foreground/70 mb-2">Plataforma (Zoom/Google Meet)</label>
+                            <input type="text" value={workshopData.platform} onChange={e => setWorkshopData({...workshopData, platform: e.target.value})} className="w-full px-4 py-3 rounded-xl bg-white/50 dark:bg-black/20 border border-black/10 focus:ring-2 focus:ring-primary-500" />
+                          </div>
+                          <div className="md:col-span-2">
+                            <label className="block text-xs font-bold uppercase tracking-wider text-foreground/70 mb-2">Enlace de la reunión (Solo para inscriptos)</label>
+                            <input type="text" value={workshopData.meetingLink} onChange={e => setWorkshopData({...workshopData, meetingLink: e.target.value})} className="w-full px-4 py-3 rounded-xl bg-white/50 dark:bg-black/20 border border-black/10 focus:ring-2 focus:ring-primary-500" />
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-foreground/70 mb-2">Descripción</label>
+                      <textarea value={workshopData.description} onChange={e => setWorkshopData({...workshopData, description: e.target.value})} rows={3} className="w-full px-4 py-3 rounded-xl bg-white/50 dark:bg-black/20 border border-black/10 focus:ring-2 focus:ring-primary-500" />
+                    </div>
 
-            <form onSubmit={activeTab !== '📋 Batch JSON' && activeTab !== '📦 Inventario' && activeTab !== '📬 Pedidos' ? handleSubmit : undefined}>
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-foreground/70 mb-2">Requisitos / Materiales</label>
+                      <textarea value={workshopData.requirements} onChange={e => setWorkshopData({...workshopData, requirements: e.target.value})} rows={2} className="w-full px-4 py-3 rounded-xl bg-white/50 dark:bg-black/20 border border-black/10 focus:ring-2 focus:ring-primary-500" placeholder="Ej: Traer delantal..." />
+                    </div>
+
+                    <div className="flex gap-4">
+                      {workshopData.id && (
+                        <button type="button" onClick={() => {setWorkshopData(INITIAL_WORKSHOP_STATE); setEditingId(null);}} className="flex-1 py-4 rounded-xl border border-red-500 text-red-500 font-bold">Cancelar</button>
+                      )}
+                      <button type="button" onClick={handleWorkshopSubmit} disabled={uploading} className="flex-[2] py-4 rounded-xl bg-primary-600 text-white font-bold shadow-lg shadow-primary-500/20">
+                        {uploading ? 'Guardando...' : workshopData.id ? 'Actualizar Taller' : 'Crear Taller'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Listado de Talleres */}
+                  <div className="flex-1 border-l border-black/5 dark:border-white/5 pl-8">
+                    <h3 className="text-lg font-bold mb-6">Talleres Programados</h3>
+                    <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
+                      {workshops.map(w => (
+                        <div key={w.id} className={`p-4 rounded-2xl border transition-all ${viewingWorkshopId === w.id ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20' : 'border-black/5 bg-white/50 dark:bg-black/10'}`}>
+                          <div className="flex justify-between items-start gap-4 mb-2">
+                            <h4 className="font-bold leading-tight">{w.title}</h4>
+                            <span className="text-[10px] font-black uppercase px-2 py-1 bg-black/5 dark:bg-white/10 rounded-md">
+                              {w.type === 'online' ? '🎥' : '📍'}
+                            </span>
+                          </div>
+                          <p className="text-xs text-foreground/50 mb-3">{new Date(w.date).toLocaleDateString()} • {w.occupiedSpots}/{w.capacity} cupos</p>
+                          <div className="flex gap-2">
+                            <button onClick={() => setViewingWorkshopId(w.id === viewingWorkshopId ? null : w.id)} className="flex-1 py-2 rounded-lg bg-white dark:bg-black/40 text-xs font-bold border border-black/5">
+                              {viewingWorkshopId === w.id ? 'Ocultar Inscriptos' : 'Ver Inscriptos'}
+                            </button>
+                            <button onClick={() => {setWorkshopData(w); setEditingId(w.id);}} className="p-2 rounded-lg bg-blue-100 text-blue-600 dark:bg-blue-900/30">
+                              <Edit3 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sección de Inscriptos (cuando se selecciona uno) */}
+                {viewingWorkshopId && (
+                  <div className="mt-8 pt-8 border-t border-black/5 animate-in slide-in-from-top-4">
+                    <div className="flex items-center justify-between mb-6">
+                      <h3 className="text-xl font-bold">Inscriptos: {workshops.find(w => w.id === viewingWorkshopId)?.title}</h3>
+                      <span className="bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 px-4 py-1.5 rounded-full text-xs font-bold">
+                        {selectedWorkshopBookings.length} Reservas Totales
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {selectedWorkshopBookings.map(b => (
+                        <div key={b.id} className="bg-white/80 dark:bg-black/40 p-5 rounded-2xl border border-black/5 shadow-sm">
+                          <div className="flex justify-between items-start mb-3">
+                            <div>
+                              <p className="font-bold">{b.userName}</p>
+                              <p className="text-[10px] text-foreground/40">{b.userEmail}</p>
+                            </div>
+                            <span className={`text-[10px] font-black uppercase px-2 py-1 rounded-md ${
+                              b.status === 'confirmado' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                            }`}>
+                              {b.status}
+                            </span>
+                          </div>
+                          <p className="text-sm font-medium mb-4">{b.slots} lugar(es) • Total: ${b.totalPrice}</p>
+                          <div className="flex gap-2">
+                            {b.status === 'pendiente' && (
+                              <button onClick={() => updateBookingStatus(b.id, 'confirmado')} className="flex-1 py-2 bg-green-500 text-white text-[10px] font-black rounded-lg">Confirmar Pago</button>
+                            )}
+                            <a href={`https://wa.me/${b.userPhone?.replace(/\D/g,'')}`} target="_blank" className="p-2 bg-[#25D366] text-white rounded-lg"><MessageCircle className="w-4 h-4" /></a>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB: ARTICULOS (BLOG) */}
+            {activeTab === '📝 Artículos' && (
+              <div className="space-y-8">
+                <div className="flex flex-col lg:flex-row gap-10">
+                  {/* Editor de Post */}
+                  <div className="flex-[2] space-y-6">
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-xl font-bold flex items-center gap-2 text-primary-600 dark:text-primary-400">
+                        {editingId ? 'Editando Artículo' : 'Nuevo Artículo Editorial'}
+                      </h2>
+                      {editingId && (
+                        <button onClick={() => {setEditingId(null); setBlogData(INITIAL_POST_STATE);}} className="text-xs font-bold text-red-500 hover:underline flex items-center gap-1">
+                          <Trash2 className="w-3 h-3" /> Cancelar Edición
+                        </button>
+                      )}
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="md:col-span-2">
+                        <label className="block text-xs font-bold uppercase tracking-wider text-foreground/70 mb-2">Título del Post *</label>
+                        <input type="text" value={blogData.title} onChange={e => setBlogData({...blogData, title: e.target.value})} className="w-full px-4 py-3 rounded-xl bg-white/50 dark:bg-black/20 border border-black/10 focus:ring-2 focus:ring-primary-500 font-bold text-lg" placeholder="Ej: Cómo cuidar tu Monstera en invierno" />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-xs font-bold uppercase tracking-wider text-foreground/70 mb-2">Resumen (Excerpt) *</label>
+                        <textarea value={blogData.excerpt} onChange={e => setBlogData({...blogData, excerpt: e.target.value})} rows={2} className="w-full px-4 py-3 rounded-xl bg-white/50 dark:bg-black/20 border border-black/10 focus:ring-2 focus:ring-primary-500" placeholder="Breve descripción para el listado..." />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-foreground/70 mb-2">Categoría</label>
+                        <select value={blogData.category} onChange={e => setBlogData({...blogData, category: e.target.value})} className="w-full px-4 py-3 rounded-xl bg-white/50 dark:bg-black/20 border border-black/10 focus:ring-2 focus:ring-primary-500">
+                          <option value="Guías Pro">📚 Guías Pro</option>
+                          <option value="Decoración">🏠 Decoración</option>
+                          <option value="Plantas Raras">💎 Plantas Raras</option>
+                          <option value="Noticias">🔔 Noticias</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-foreground/70 mb-2">Etiquetas (separadas por coma)</label>
+                        <input type="text" value={blogData.tags} onChange={e => setBlogData({...blogData, tags: e.target.value})} className="w-full px-4 py-3 rounded-xl bg-white/50 dark:bg-black/20 border border-black/10 focus:ring-2 focus:ring-primary-500" placeholder="monstera, interior, riego" />
+                      </div>
+                    </div>
+
+                    <div className="mb-6">
+                      <label className="block text-xs font-bold uppercase tracking-wider text-foreground/70 mb-2">Imagen de Portada</label>
+                      <input type="text" value={blogData.coverImage} onChange={e => setBlogData({...blogData, coverImage: e.target.value})} className="w-full px-4 py-3 rounded-xl bg-white/50 dark:bg-black/20 border border-black/10 focus:ring-2 focus:ring-primary-500 text-xs mb-2" placeholder="URL de la imagen o subir archivo" />
+                      <label className="flex items-center justify-center w-full h-24 border-2 border-dashed border-primary-500/30 rounded-2xl cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
+                        <div className="flex flex-col items-center justify-center p-4">
+                          {imageFile ? <p className="text-xs font-bold text-primary-600">{imageFile.name}</p> : <p className="text-xs text-foreground/60">Subir foto HD</p>}
+                        </div>
+                        <input type="file" className="hidden" accept="image/*" onChange={(e) => setImageFile(e.target.files?.[0] || null)} />
+                      </label>
+                    </div>
+
+                    {/* Bloc Editor Interface */}
+                    <div className="bg-black/5 dark:bg-white/5 p-6 rounded-[32px] border border-black/5">
+                      <h3 className="text-sm font-black uppercase tracking-widest opacity-40 mb-6 font-display">Contenido del Artículo (Bloques)</h3>
+                      
+                      <div className="space-y-4 mb-8">
+                        {blogData.blocks.map((block, index) => (
+                          <div key={block.id} className="group relative bg-white dark:bg-black/40 p-4 rounded-2xl border border-black/5 flex items-start gap-4 shadow-sm">
+                            <span className="text-[10px] font-black opacity-20 mt-3">{index + 1}</span>
+                            <div className="flex-1">
+                              {['p', 'h2', 'h3', 'quote', 'ul'].includes(block.type) ? (
+                                <textarea 
+                                  value={block.content} 
+                                  onChange={e => updateBlock(block.id, e.target.value)}
+                                  rows={block.type === 'p' ? 3 : 1}
+                                  placeholder={block.type === 'p' ? 'Escribe aquí...' : block.type === 'ul' ? 'Uno por línea...' : 'Título...'}
+                                  className={`w-full bg-transparent border-none focus:ring-0 p-0 resize-none ${block.type === 'h2' ? 'text-xl font-bold' : block.type === 'h3' ? 'font-bold' : block.type === 'quote' ? 'italic border-l-2 border-primary-500 pl-4 font-display text-lg' : ''}`}
+                                />
+                              ) : block.type === 'img' ? (
+                                <div className="space-y-2">
+                                  <input type="text" value={block.content} onChange={e => updateBlock(block.id, e.target.value)} placeholder="URL de la imagen" className="w-full bg-transparent border-none text-xs" />
+                                  {block.content && <img src={block.content} className="h-20 rounded-lg shadow-md" alt="" />}
+                                </div>
+                              ) : block.type === 'product' ? (
+                                <div className="space-y-2">
+                                  <input type="text" value={block.content} onChange={e => updateBlock(block.id, e.target.value)} placeholder="ID del Producto (p1, p2...)" className="w-full bg-transparent border-none font-bold" />
+                                  <p className="text-[10px] opacity-40 uppercase font-black">Se mostrará una tarjeta de compra en la revista.</p>
+                                </div>
+                              ) : null}
+                            </div>
+                            <button onClick={() => removeBlock(block.id)} className="p-2 opacity-0 group-hover:opacity-100 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 transition-all"><Trash2 className="w-3.5 h-3.5"/></button>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Add Block Toolbar */}
+                      <div className="flex flex-wrap gap-2 p-2 bg-white/50 dark:bg-black/20 rounded-2xl">
+                        <button type="button" onClick={() => addBlock('p')} className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-black/40 rounded-xl text-[10px] font-black uppercase tracking-widest border border-black/5 hover:scale-105 transition-all shadow-sm">¶ Párrafo</button>
+                        <button type="button" onClick={() => addBlock('h2')} className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-black/40 rounded-xl text-[10px] font-black uppercase tracking-widest border border-black/5 hover:scale-105 transition-all shadow-sm">H2 Título</button>
+                        <button type="button" onClick={() => addBlock('h3')} className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-black/40 rounded-xl text-[10px] font-black uppercase tracking-widest border border-black/5 hover:scale-105 transition-all shadow-sm">H3 Sub</button>
+                        <button type="button" onClick={() => addBlock('img')} className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-black/40 rounded-xl text-[10px] font-black uppercase tracking-widest border border-black/5 hover:scale-105 transition-all shadow-sm">📷 Imagen</button>
+                        <button type="button" onClick={() => addBlock('ul')} className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-black/40 rounded-xl text-[10px] font-black uppercase tracking-widest border border-black/5 hover:scale-105 transition-all shadow-sm">☰ Lista</button>
+                        <button type="button" onClick={() => addBlock('product')} className="flex items-center gap-2 px-4 py-2 bg-amber-50 dark:bg-amber-900/20 text-amber-700 rounded-xl text-[10px] font-black uppercase tracking-widest border border-amber-200 hover:scale-105 transition-all shadow-sm">🛒 Producto</button>
+                        <button type="button" onClick={() => addBlock('quote')} className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-black/40 rounded-xl text-[10px] font-black uppercase tracking-widest border border-black/5 hover:scale-105 transition-all shadow-sm">❝ Cita</button>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-4 p-6 bg-white dark:bg-black/20 rounded-[32px] border border-black/5 shadow-inner">
+                      <div className="flex-1">
+                         <label className="block text-[10px] font-black uppercase tracking-widest opacity-40 mb-2">Estado</label>
+                         <select value={blogData.status} onChange={e => setBlogData({...blogData, status: e.target.value as any})} className="w-full px-4 py-3 rounded-xl bg-black/5 dark:bg-white/5 border-none font-bold text-xs">
+                          <option value="draft">📁 Borrador</option>
+                          <option value="published">🚀 Publicado</option>
+                        </select>
+                      </div>
+                      <div className="flex-[2] flex flex-col justify-end">
+                        <button type="button" onClick={handlePostSubmit} disabled={uploading} className="w-full py-4 rounded-xl bg-primary-600 text-white font-black uppercase tracking-widest text-xs shadow-xl shadow-primary-500/30 hover:-translate-y-1 transition-all">
+                          {uploading ? 'Guardando...' : editingId ? 'Guardar Cambios' : 'Publicar Artículo'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Listado de Posts */}
+                  <div className="flex-1 border-l border-black/5 dark:border-white/5 pl-10">
+                    <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
+                       <BookOpen className="w-5 h-5 text-primary-600" /> Artículos Guardados
+                    </h3>
+                    <div className="space-y-4 max-h-[1000px] overflow-y-auto pr-4">
+                      {posts.length === 0 ? (
+                        <p className="text-sm opacity-40 italic">Aún no hay artículos.</p>
+                      ) : posts.map(p => (
+                        <div key={p.id} className="group bg-white/50 dark:bg-black/20 rounded-2xl p-4 border border-black/5 hover:border-primary-500 hover:shadow-lg transition-all">
+                          <div className="flex gap-4">
+                            <img src={p.coverImage} className="w-16 h-16 rounded-xl object-cover shadow-sm bg-black/5" alt="" />
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-bold text-sm leading-tight mb-1 truncate">{p.title}</h4>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[9px] font-black uppercase px-2 py-0.5 bg-primary-50 text-primary-600 dark:bg-primary-900/30 rounded-md">
+                                  {p.category}
+                                </span>
+                                <span className={`text-[9px] font-black uppercase ${p.status === 'published' ? 'text-green-600' : 'text-amber-600'}`}>
+                                  {p.status === 'published' ? 'Público' : 'Borrador'}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex flex-col gap-2">
+                              <button onClick={() => {setBlogData({...p, tags: p.tags.join(', ')}); setEditingId(p.id); setActiveTab('📝 Artículos'); window.scrollTo({top: 0, behavior: 'smooth'});}} className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"><Edit3 className="w-4 h-4"/></button>
+                              <button onClick={() => deleteDoc(doc(db, 'blog_posts', p.id!))} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"><Trash2 className="w-4 h-4"/></button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={activeTab !== '📋 Batch JSON' && activeTab !== '📦 Inventario' && activeTab !== '📬 Pedidos' && activeTab !== '🗓️ Talleres' && activeTab !== '📝 Artículos' ? handleSubmit : undefined}>
               
               {/* TAB 0: INVENTARIO */}
               <div className={activeTab === '📦 Inventario' ? 'block' : 'hidden'}>
@@ -592,7 +1079,7 @@ export default function AdminPage() {
               
               {activeTab !== '📋 Batch JSON' && activeTab !== '📦 Inventario' && (
                 <div className="mt-8 pt-8 border-t border-black/10 dark:border-white/10 flex flex-col md:flex-row gap-4 items-center">
-                  <p className="text-sm text-foreground/50 flex-1">Los datos se guardarán cruzados contra el código `{editingId || "NUEVO"}`.</p>
+                  <p className="text-sm text-foreground/50 flex-1">Los datos se guardarán cruzados contra el código: {editingId || "NUEVO"}.</p>
                   <button 
                     type="submit" disabled={uploading}
                     className="w-full md:w-auto px-8 py-4 rounded-xl flex items-center justify-center gap-2 bg-primary-600 hover:bg-primary-700 text-white font-bold transition-all shadow-lg hover:shadow-primary-500/20 disabled:opacity-50"

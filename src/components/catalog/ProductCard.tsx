@@ -1,6 +1,6 @@
 'use client';
 
-import { Heart, ShoppingBag } from 'lucide-react';
+import { Heart, ShoppingBag, Star } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { useFavorites } from '@/context/FavoritesContext';
@@ -26,6 +26,9 @@ export default function ProductCard({ product }: ProductCardProps) {
     if (!user) { router.push('/login'); return; }
     toggleFavorite(product);
   };
+
+  const currentRating = product.ratingAvg || 0;
+  const reviewCount = product.reviewCount || 0;
 
   return (
     <Link
@@ -64,8 +67,16 @@ export default function ProductCard({ product }: ProductCardProps) {
       </div>
 
       <div className="p-6">
-        <div className="text-xs font-semibold uppercase tracking-wider text-primary-600 dark:text-primary-400 mb-2">
-          {product.category}
+        <div className="flex justify-between items-center mb-2">
+          <div className="text-xs font-semibold uppercase tracking-wider text-primary-600 dark:text-primary-400">
+            {product.category}
+          </div>
+          {currentRating > 0 && (
+            <div className="flex items-center gap-1 text-xs font-bold text-amber-500">
+              <Star className="w-3 h-3 fill-current" />
+              <span>{currentRating.toFixed(1)}</span>
+            </div>
+          )}
         </div>
         <h3 className="text-xl font-display font-semibold mb-2 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
           {product.name}
@@ -73,8 +84,15 @@ export default function ProductCard({ product }: ProductCardProps) {
         <p className="text-sm text-foreground/70 mb-4 line-clamp-2">
           {product.description}
         </p>
-        <div className="text-lg font-bold">
-          ${Number(product.price).toFixed(2)}
+        <div className="flex justify-between items-end">
+          <div className="text-lg font-bold">
+            ${Number(product.price).toFixed(2)}
+          </div>
+          {reviewCount > 0 && (
+            <span className="text-[10px] text-foreground/40 font-bold uppercase tracking-tighter">
+              {reviewCount} {reviewCount === 1 ? 'opinión' : 'opiniones'}
+            </span>
+          )}
         </div>
       </div>
     </Link>
