@@ -75,11 +75,10 @@ export default function RootLayout({
         <meta name="msapplication-TileColor" content="#2d6a4f" />
         <meta name="msapplication-TileImage" content="/icon-192x192.png" />
         
-        {/* Model Viewer para Realidad Aumentada (AR) */}
         <Script 
           src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js" 
           type="module"
-          strategy="lazyOnload"
+          strategy="afterInteractive"
         />
       </head>
       <body className="min-h-screen flex flex-col font-sans selection:bg-primary-500 selection:text-white">
