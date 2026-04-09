@@ -19,7 +19,7 @@ import {
 import { db } from '@/lib/firebase';
 import { 
   Calendar, Clock, User, ArrowLeft, MessageCircle, Send, 
-  Share2, Bookmark, Heart, ChevronRight, ShoppingCart, Sparkles 
+  Share2, Bookmark, Heart, ChevronRight, ShoppingCart, Sparkles, BookOpen 
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
