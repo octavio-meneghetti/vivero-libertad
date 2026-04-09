@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   User, Heart, Package, Lock, Camera, Save, LogOut,
-  Leaf, MapPin, Edit3, CheckCircle,
+  Leaf, MapPin, Edit3, CheckCircle, Calendar,
   ChevronRight, Star, AlertTriangle, ArrowRight
 } from 'lucide-react';
 import Navbar from '@/components/layout/Navbar';
