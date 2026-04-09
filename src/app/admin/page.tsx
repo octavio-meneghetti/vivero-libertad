@@ -39,12 +39,14 @@ const INITIAL_STATE = {
 };
 
 const INITIAL_WORKSHOP_STATE = {
+  id: undefined as string | undefined,
   title: '', description: '', image: '', date: '', duration: '',
   price: '', capacity: '', instructor: '', type: 'presencial',
   address: '', platform: '', meetingLink: '', requirements: ''
 };
 
 const INITIAL_POST_STATE = {
+  id: undefined as string | undefined,
   title: '', excerpt: '', coverImage: '', category: 'Guías Pro',
   tags: '', status: 'draft', blocks: [] as any[]
 };
@@ -209,7 +211,7 @@ export default function AdminPage() {
           let payload = { ...INITIAL_STATE, ...item };
           payload.price = parseFloat(payload.price) || 0;
           payload.stock = parseInt(payload.stock) || 0;
-          payload.category = (payload.mainCategory || payload.category || 'Interior').toLowerCase().trim();
+          payload.category = (payload.mainCategory || 'Interior').toLowerCase().trim();
           payload.image = payload.image || PLACEHOLDER_IMAGE;
           payload.createdAt = new Date().toISOString();
           return addDoc(collection(db, "products"), payload);
@@ -255,11 +257,11 @@ export default function AdminPage() {
         imageUrl = await getDownloadURL(snapshot.ref);
       }
 
-      const payload = {
+      const payload: any = {
         ...data,
         price: parseFloat(data.price),
         stock: parseInt(data.stock, 10),
-        category: (data.mainCategory || data.category || 'Interior').toLowerCase().trim(),
+        category: (data.mainCategory || 'Interior').toLowerCase().trim(),
         image: imageUrl
       };
 
@@ -314,9 +316,9 @@ export default function AdminPage() {
         updatedAt: new Date().toISOString()
       };
 
-      if (workshopData.id) {
+      if ((workshopData as any).id) {
         const { id, ...updateData } = payload;
-        await updateDoc(doc(db, "workshops", id), updateData);
+        await updateDoc(doc(db, "workshops", id as string), updateData);
         setSuccess('¡Taller actualizado exitosamente!');
       } else {
         (payload as any).createdAt = new Date().toISOString();
@@ -382,7 +384,7 @@ export default function AdminPage() {
 
       if ((blogData as any).id) {
         const { id, ...updateData } = payload as any;
-        await updateDoc(doc(db, 'blog_posts', id), updateData);
+        await updateDoc(doc(db, 'blog_posts', id as string), updateData);
         setSuccess('¡Artículo actualizado!');
       } else {
         (payload as any).createdAt = new Date().toISOString();

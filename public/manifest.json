@@ -1,0 +1,43 @@
+{
+  "name": "Vivero Libertad",
+  "short_name": "Vivero",
+  "description": "Tu vivero online de confianza. Encuentra plantas, accesorios y únete a nuestra comunidad botánica.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f1f15",
+  "theme_color": "#2d6a4f",
+  "orientation": "portrait-primary",
+  "lang": "es",
+  "categories": ["shopping", "lifestyle"],
+  "icons": [
+    {
+      "src": "/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Ver Catálogo",
+      "short_name": "Catálogo",
+      "description": "Explorar todas las plantas disponibles",
+      "url": "/#catalogo",
+      "icons": [{ "src": "/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Mis Pedidos",
+      "short_name": "Pedidos",
+      "description": "Ver el estado de tus pedidos",
+      "url": "/mis-pedidos",
+      "icons": [{ "src": "/icon-192x192.png", "sizes": "192x192" }]
+    }
+  ]
+}

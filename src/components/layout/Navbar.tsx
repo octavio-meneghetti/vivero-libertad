@@ -2,16 +2,18 @@
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import { User, Leaf, LogOut, ShoppingBag, UserCircle, Star, ChevronDown, Heart } from 'lucide-react';
+import { User, Leaf, LogOut, ShoppingBag, UserCircle, Star, ChevronDown, Heart, Menu, X } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import { useFavorites } from '@/context/FavoritesContext';
+import PWAInstall from '../pwa/PWAInstall';
 
 export default function Navbar() {
   const { user, isAdmin, loading, logout, userProfile } = useAuth();
   const { cartCount, setIsOpen } = useCart();
   const { favorites } = useFavorites();
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Cerrar dropdown al hacer click fuera
@@ -49,6 +51,19 @@ export default function Navbar() {
           </div>
 
           <div className="flex items-center space-x-3">
+            
+            {/* Mobile Menu Button (Hamburger) - Visible only on mobile */}
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="md:hidden p-2 text-foreground/80 hover:bg-black/5 dark:hover:bg-white/5 rounded-full transition-colors order-first"
+              aria-label={mobileMenuOpen ? 'Cerrar menú' : 'Abrir menú'}
+              id="mobile-menu-button"
+            >
+              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            </button>
+            
+            {/* Install PWA Button (Discreet) */}
+            <PWAInstall />
 
             {/* Carrito */}
             <button
@@ -161,9 +176,61 @@ export default function Navbar() {
               </Link>
             )}
           </div>
-
         </div>
       </div>
+
+      {/* MOBILE MENU DROPDOWN */}
+      {mobileMenuOpen && (
+        <div className="md:hidden absolute top-20 left-0 right-0 bg-white/95 dark:bg-black/95 backdrop-blur-xl border-b border-black/10 dark:border-white/10 shadow-2xl animate-in slide-in-from-top-4 duration-300 z-40 overflow-hidden">
+          <div className="flex flex-col p-6 space-y-4">
+            <Link 
+              href="/#catalogo" 
+              onClick={() => setMobileMenuOpen(false)}
+              className="text-lg font-bold hover:text-primary-600 transition-colors py-2 border-b border-black/5 dark:border-white/5"
+            >
+              📊 Catálogo
+            </Link>
+            <Link 
+              href="/talleres" 
+              onClick={() => setMobileMenuOpen(false)}
+              className="text-lg font-bold hover:text-primary-600 transition-colors py-2 border-b border-black/5 dark:border-white/5"
+            >
+              🗓️ Talleres
+            </Link>
+            <Link 
+              href="/blog" 
+              onClick={() => setMobileMenuOpen(false)}
+              className="text-lg font-bold hover:text-primary-600 transition-colors py-2 border-b border-black/5 dark:border-white/5"
+            >
+              📝 Blog
+            </Link>
+            <Link 
+              href="/comunidad" 
+              onClick={() => setMobileMenuOpen(false)}
+              className="text-lg font-bold hover:text-primary-600 transition-colors py-2 border-b border-black/5 dark:border-white/5"
+            >
+              🏘️ Comunidad
+            </Link>
+            <Link 
+              href="#" 
+              onClick={() => setMobileMenuOpen(false)}
+              className="text-lg font-bold hover:text-primary-600 transition-colors py-2"
+            >
+              🌿 Nosotros
+            </Link>
+            
+            {!user && (
+              <Link 
+                href="/login"
+                onClick={() => setMobileMenuOpen(false)}
+                className="mt-4 flex items-center justify-center gap-2 px-6 py-4 rounded-3xl bg-primary-600 text-white font-black text-center shadow-lg shadow-primary-500/30"
+              >
+                <User className="w-5 h-5" /> Ingresar al Vivero
+              </Link>
+            )}
+          </div>
+        </div>
+      )}
     </nav>
   );
 }
