@@ -6,13 +6,15 @@ import Link from 'next/link';
 import {
   User, Heart, Package, Lock, Camera, Save, LogOut,
   Leaf, MapPin, Edit3, CheckCircle, Calendar,
-  ChevronRight, Star, AlertTriangle, ArrowRight
+  ChevronRight, Star, AlertTriangle, ArrowRight,
+  Sparkles, Award, ShoppingBag
 } from 'lucide-react';
 import Navbar from '@/components/layout/Navbar';
 import { useAuth } from '@/context/AuthContext';
 import { useFavorites } from '@/context/FavoritesContext';
 import { saveUserProfile, uploadAvatar, UserProfile, EMPTY_PROFILE } from '@/lib/userProfile';
 import { getBookingsByUser } from '@/lib/workshops';
+import { subscribeToUserOrders, Order } from '@/lib/orders';
 
 // ---------- Tipos ----------
 const TABS = [
@@ -84,6 +86,7 @@ export default function PerfilPage() {
   const [saved, setSaved] = useState(false);
   const [myBookings, setMyBookings] = useState<any[]>([]);
   const [loadingBookings, setLoadingBookings] = useState(false);
+  const [myOrders, setMyOrders] = useState<Order[]>([]);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { setMounted(true); }, []);
@@ -111,6 +114,24 @@ export default function PerfilPage() {
         .finally(() => setLoadingBookings(false));
     }
   }, [activeTab, user]);
+
+  // Listener de pedidos en tiempo real
+  useEffect(() => {
+    if (!user) return;
+    const unsub = subscribeToUserOrders(user.uid, setMyOrders);
+    return () => unsub();
+  }, [user]);
+
+  // Cálculo de Nivel Botánico basado en semillas
+  const getBotanicalLevel = (seeds: number) => {
+    if (seeds < 50) return { name: 'Semilla', icon: Leaf, next: 50, color: 'text-green-500' };
+    if (seeds < 200) return { name: 'Brote', icon: Sparkles, next: 200, color: 'text-emerald-500' };
+    if (seeds < 500) return { name: 'Planta Joven', icon: Award, next: 500, color: 'text-primary-500' };
+    return { name: 'Maestro Botánico', icon: Star, next: 1000, color: 'text-amber-500' };
+  };
+
+  const level = getBotanicalLevel(userProfile?.seeds || 0);
+  const progress = Math.min(100, ((userProfile?.seeds || 0) / level.next) * 100);
 
   if (!mounted || loading || !user) {
     return (
@@ -211,13 +232,19 @@ export default function PerfilPage() {
 
               {/* Stats rápidas */}
               <div className="sm:ml-auto flex gap-4">
-                <div className="text-center bg-white/10 backdrop-blur-sm rounded-2xl px-5 py-3">
+                <div className="text-center bg-white/10 backdrop-blur-sm rounded-2xl px-5 py-3 border border-white/10">
                   <p className="text-2xl font-bold text-white">{favorites.length}</p>
-                  <p className="text-primary-200 text-xs font-medium">Favoritas</p>
+                  <p className="text-primary-200 text-xs font-medium uppercase tracking-tighter">Favoritos</p>
                 </div>
-                <div className="text-center bg-white/10 backdrop-blur-sm rounded-2xl px-5 py-3">
-                  <p className="text-2xl font-bold text-white">0</p>
-                  <p className="text-primary-200 text-xs font-medium">Pedidos</p>
+                <div className="text-center bg-white/10 backdrop-blur-sm rounded-2xl px-5 py-3 border border-white/10">
+                  <p className="text-2xl font-bold text-white">{myOrders.length}</p>
+                  <p className="text-primary-200 text-xs font-medium uppercase tracking-tighter">Pedidos</p>
+                </div>
+                <div className="text-center bg-amber-400/20 backdrop-blur-sm rounded-2xl px-5 py-3 border border-amber-400/30">
+                  <p className="text-2xl font-bold text-amber-300 flex items-center justify-center gap-1">
+                    {userProfile?.seeds || 0} <Leaf className="w-4 h-4" />
+                  </p>
+                  <p className="text-amber-200 text-[10px] font-bold uppercase tracking-widest">Semillas</p>
                 </div>
               </div>
             </div>
@@ -340,6 +367,63 @@ export default function PerfilPage() {
                       <><Save className="w-5 h-5" /> Guardar Cambios</>
                     )}
                   </button>
+                </div>
+
+                {/* ── Dashboard Cards Extra ── */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-12 pt-12 border-t border-black/5 dark:border-white/5">
+                  {/* Card Nivel */}
+                  <div className="bg-gradient-to-br from-primary-50 to-emerald-50 dark:from-primary-900/10 dark:to-emerald-900/10 p-6 rounded-[32px] border border-primary-100/50 dark:border-primary-800/30">
+                    <div className="flex items-center gap-4 mb-6">
+                      <div className={`w-14 h-14 rounded-2xl bg-white dark:bg-slate-900 flex items-center justify-center shadow-lg ${level.color}`}>
+                        <level.icon className="w-8 h-8" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-black uppercase tracking-[0.2em] opacity-40 mb-1">Tu Rango</h4>
+                        <p className="text-xl font-display font-black text-foreground">{level.name}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-2">
+                       <div className="flex justify-between text-xs font-bold">
+                          <span className="opacity-40">Progreso al siguiente nivel</span>
+                          <span className="text-primary-600 font-black">{userProfile?.seeds || 0} / {level.next}</span>
+                       </div>
+                       <div className="h-3 bg-black/5 dark:bg-white/10 rounded-full overflow-hidden p-0.5">
+                          <div 
+                            className="h-full bg-gradient-to-r from-primary-400 to-primary-600 rounded-full transition-all duration-1000" 
+                            style={{ width: `${progress}%` }}
+                          />
+                       </div>
+                       <p className="text-[10px] opacity-40 font-bold mt-2">✨ ¡Gana semillas comprando y participando en nuestro blog!</p>
+                    </div>
+                  </div>
+
+                  {/* Card Ultimo Pedido */}
+                  <div className="bg-white dark:bg-slate-900 p-6 rounded-[32px] border border-black/5 dark:border-white/5 shadow-xl">
+                    <h4 className="text-xs font-black uppercase tracking-[0.2em] opacity-40 mb-6">Última Actividad</h4>
+                    {myOrders.length > 0 ? (
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-4">
+                           <div className="w-12 h-12 bg-primary-50 dark:bg-primary-900/30 rounded-2xl flex items-center justify-center">
+                              <Package className="w-6 h-6 text-primary-600" />
+                           </div>
+                           <div>
+                              <p className="text-sm font-bold">Pedido #{myOrders[0].id?.slice(-6).toUpperCase()}</p>
+                              <p className="text-xs opacity-50 capitalize">{myOrders[0].status}</p>
+                           </div>
+                        </div>
+                        <Link href="/mis-pedidos" className="flex items-center justify-between p-3 bg-black/5 dark:bg-white/5 rounded-xl text-xs font-bold hover:bg-black/10 transition-colors">
+                           <span>Ver seguimiento</span>
+                           <ChevronRight className="w-4 h-4" />
+                        </Link>
+                      </div>
+                    ) : (
+                      <div className="h-full flex flex-col items-center justify-center py-6 text-center opacity-40">
+                         <ShoppingBag className="w-8 h-8 mb-2" />
+                         <p className="text-xs font-bold">Sin pedidos recientes</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )}

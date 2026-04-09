@@ -21,6 +21,7 @@ export interface UserProfile {
   bio: string;
   createdAt: string;
   updatedAt: string;
+  seeds: number;
 }
 
 export interface FavoriteProduct {
@@ -43,6 +44,7 @@ export const EMPTY_PROFILE: UserProfile = {
   bio: '',
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
+  seeds: 0,
 };
 
 /** Lee el perfil del usuario desde Firestore. Si no existe, retorna null. */
@@ -113,4 +115,21 @@ export async function uploadAvatar(uid: string, file: File): Promise<string> {
   const storageRef = ref(storage, `avatars/${uid}_${Date.now()}`);
   const snapshot = await uploadBytes(storageRef, file);
   return getDownloadURL(snapshot.ref);
+}
+
+/** Incrementa el contador de semillas de un usuario. */
+export async function addSeedsToUser(uid: string, amount: number): Promise<void> {
+  const profileRef = doc(db, 'users', uid);
+  const snap = await getDoc(profileRef);
+  
+  if (snap.exists()) {
+    const currentSeeds = (snap.data() as UserProfile).seeds || 0;
+    await updateDoc(profileRef, {
+      seeds: currentSeeds + amount,
+      updatedAt: new Date().toISOString()
+    });
+  } else {
+    // Si por alguna razón no existe el perfil, lo inicializamos con las semillas
+    await saveUserProfile(uid, { seeds: amount });
+  }
 }

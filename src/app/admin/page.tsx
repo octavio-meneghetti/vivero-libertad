@@ -10,6 +10,7 @@ import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, order
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import * as B from '@/types/botanical';
 import { subscribeToAllOrders, updateOrderStatus, Order, OrderStatus, STATUS_LABELS, STATUS_COLORS } from '@/lib/orders';
+import { addSeedsToUser } from '@/lib/userProfile';
 
 const TABS = ['📬 Pedidos', '🗓️ Talleres', '📝 Artículos', '📦 Inventario', 'Comercial', 'Identificación', 'Ambiental', 'Morfología', 'Ornamental', 'Ecología', '📋 Batch JSON'];
 
@@ -147,9 +148,20 @@ export default function AdminPage() {
   const handleStatusChange = async (orderId: string, newStatus: OrderStatus) => {
     setUpdatingOrderId(orderId);
     try {
+      const order = orders.find(o => o.id === orderId);
       await updateOrderStatus(orderId, newStatus);
+      
+      // Si el pedido se confirma (pago recibido), otorgamos Semillas de Lealtad
+      if (newStatus === 'confirmado' && order) {
+        const seedsEarned = Math.floor(order.total / 100);
+        if (seedsEarned > 0) {
+          await addSeedsToUser(order.userId, seedsEarned);
+          setSuccess(`¡Pedido confirmado! Se han otorgado ${seedsEarned} semillas a ${order.userName}.`);
+        }
+      }
     } catch (e) {
       console.error(e);
+      alert('Error al actualizar el estado del pedido.');
     } finally {
       setUpdatingOrderId(null);
     }
