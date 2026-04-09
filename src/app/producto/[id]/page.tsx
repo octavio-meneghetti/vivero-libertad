@@ -8,11 +8,12 @@ import Navbar from '@/components/layout/Navbar';
 import { 
   ArrowLeft, ShoppingCart, MessageCircle, Sun, Droplets, PawPrint, CheckCircle2, AlertTriangle, 
   Leaf, Microscope, Snowflake, ThermometerSun, Star, Camera, Check, Plus, MessageSquare,
-  Calendar, Clock, ChevronRight
+  Calendar, Clock, ChevronRight, Box, Maximize2
 } from 'lucide-react';
 import Link from 'next/link';
 import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/AuthContext';
+import PlantARViewer from '@/components/products/PlantARViewer';
 import { 
   Review, getReviewsByProduct, canUserReview, addReview, uploadReviewImage 
 } from '@/lib/reviews';
@@ -98,6 +99,9 @@ export default function ProductPage() {
   // Reseñas
   const [reviews, setReviews] = useState<Review[]>([]);
   const [userCanReview, setUserCanReview] = useState(false);
+
+  // Realidad Aumentada (AR)
+  const [showAR, setShowAR] = useState(false);
   const [showReviewForm, setShowReviewForm] = useState(false);
   
   // Artículos relacionados
@@ -213,6 +217,7 @@ export default function ProductPage() {
   const waLink = `https://wa.me/1234567890?text=${encodeURIComponent(`Hola, me interesa comprar la planta ${product.name} (Ref: ${product.id}) que vi en su catálogo web.`)}`;
 
   return (
+    <>
     <main className="min-h-screen bg-black/5 dark:bg-white/5">
       <Navbar />
       
@@ -230,6 +235,16 @@ export default function ProductPage() {
             <img src={productImg} alt={product.name} className="absolute inset-0 w-full h-full object-cover" />
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
             
+            {/* Botón flotante de AR / 3D */}
+            <button 
+              onClick={() => setShowAR(true)}
+              className="absolute top-6 right-6 p-3 bg-white/90 dark:bg-black/80 backdrop-blur-md rounded-2xl shadow-xl shadow-black/20 hover:scale-110 active:scale-95 transition-all group z-10"
+              title="Ver en Realidad Aumentada"
+            >
+              <Box className="w-6 h-6 text-primary-600 group-hover:rotate-12 transition-transform" />
+              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-primary-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
+            </button>
+
             <div className="absolute bottom-6 left-6 right-6 flex flex-wrap gap-2">
               {product.nativa && (
                 <span className="px-3 py-1 bg-green-500/90 backdrop-blur-md text-white font-bold text-xs rounded-full uppercase flex items-center gap-1 shadow-md">
@@ -547,5 +562,15 @@ export default function ProductPage() {
         )}
       </div>
     </main>
+    
+    {/* Visor de Realidad Aumentada */}
+    {showAR && (
+      <PlantARViewer 
+        modelUrl={product.model3dUrl || (product.name.toLowerCase().includes('sombra') ? 'https://firebasestorage.googleapis.com/v0/b/vivero-libertad.firebasestorage.app/o/psxps1_style_pine_tree.glb?alt=media&token=f403d3b9-abdc-49d8-a454-33fce6ce1683' : "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Houseplant/glTF-Binary/Houseplant.glb")}
+        productName={product.name}
+        onClose={() => setShowAR(false)}
+      />
+    )}
+    </>
   );
 }
