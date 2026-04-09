@@ -3,6 +3,7 @@ import { Inter, Outfit } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
 import { CartProvider } from "@/context/CartContext";
+import { FavoritesProvider } from "@/context/FavoritesContext";
 import AIAssistant from "@/components/layout/AIAssistant";
 import CartSidebar from "@/components/layout/CartSidebar";
 
@@ -17,8 +18,8 @@ const outfit = Outfit({
 });
 
 export const metadata: Metadata = {
-  title: "EcoComunidad | Tu Vivero y Espacio Natural",
-  description: "Plataforma comunitaria de autosustentabilidad, tienda de plantas y ecosistema vivo.",
+  title: "Vivero Libertad | Plantas & Comunidad Botánica",
+  description: "Tu vivero online de confianza. Encuentra plantas, accesorios y únete a nuestra comunidad apasionada por la naturaleza.",
 };
 
 export default function RootLayout({
@@ -34,9 +35,11 @@ export default function RootLayout({
       <body className="min-h-screen flex flex-col font-sans selection:bg-primary-500 selection:text-white">
         <AuthProvider>
           <CartProvider>
-            {children}
-            <AIAssistant />
-            <CartSidebar />
+            <FavoritesProvider>
+              {children}
+              <AIAssistant />
+              <CartSidebar />
+            </FavoritesProvider>
           </CartProvider>
         </AuthProvider>
       </body>

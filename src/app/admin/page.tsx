@@ -4,13 +4,14 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/layout/Navbar';
-import { Upload, Plus, Save, Image as ImageIcon, CheckCircle, ChevronRight, Edit3, Trash2 } from 'lucide-react';
+import { Upload, Plus, Save, Image as ImageIcon, CheckCircle, ChevronRight, Edit3, Trash2, Package, User, MapPin, MessageCircle, ChevronDown } from 'lucide-react';
 import { db, storage } from '@/lib/firebase';
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import * as B from '@/types/botanical'; 
+import * as B from '@/types/botanical';
+import { subscribeToAllOrders, updateOrderStatus, Order, OrderStatus, STATUS_LABELS, STATUS_COLORS } from '@/lib/orders';
 
-const TABS = ['📦 Inventario', 'Comercial', 'Identificación', 'Ambiental', 'Morfología', 'Ornamental', 'Ecología', '📋 Batch JSON'];
+const TABS = ['📬 Pedidos', '📦 Inventario', 'Comercial', 'Identificación', 'Ambiental', 'Morfología', 'Ornamental', 'Ecología', '📋 Batch JSON'];
 
 const INITIAL_STATE = {
   // Comercial
@@ -46,6 +47,8 @@ export default function AdminPage() {
   
   const [inventory, setInventory] = useState<any[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
 
   const [data, setData] = useState(INITIAL_STATE);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -75,6 +78,26 @@ export default function AdminPage() {
       return () => unsubscribe();
     }
   }, [isAdmin]);
+
+  // Listener de Pedidos en tiempo real
+  useEffect(() => {
+    if (!isAdmin) return;
+    const unsub = subscribeToAllOrders(setOrders);
+    return () => unsub();
+  }, [isAdmin]);
+
+  const handleStatusChange = async (orderId: string, newStatus: OrderStatus) => {
+    setUpdatingOrderId(orderId);
+    try {
+      await updateOrderStatus(orderId, newStatus);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setUpdatingOrderId(null);
+    }
+  };
+
+  const pendingCount = orders.filter(o => o.status === 'pendiente').length;
 
   if (!mounted || loading || !isAdmin) return <div className="min-h-screen"></div>;
 
@@ -260,7 +283,14 @@ export default function AdminPage() {
                 className={`flex items-center justify-between px-4 py-3 rounded-xl font-medium text-sm transition-all whitespace-nowrap ${
                   activeTab === tab ? 'bg-primary-600 text-white shadow-lg shadow-primary-500/20' : 'hover:bg-black/10 dark:hover:bg-white/10 text-foreground/70'
                 }`}>
-                {tab}
+                <span className="flex items-center gap-2">
+                  {tab}
+                  {tab === '📬 Pedidos' && pendingCount > 0 && (
+                    <span className="bg-red-500 text-white text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center">
+                      {pendingCount}
+                    </span>
+                  )}
+                </span>
                 {activeTab === tab && <ChevronRight className="w-4 h-4 hidden md:block" />}
               </button>
             ))}
@@ -268,7 +298,128 @@ export default function AdminPage() {
 
           {/* FORM CONTENT */}
           <div className="flex-1 p-6 md:p-8 overflow-y-auto">
-            <form onSubmit={activeTab !== '📋 Batch JSON' && activeTab !== '📦 Inventario' ? handleSubmit : undefined}>
+
+            {/* TAB: PEDIDOS */}
+            {activeTab === '📬 Pedidos' && (
+              <div>
+                <h2 className="text-xl font-bold mb-2 flex items-center gap-2 text-primary-600 dark:text-primary-400">
+                  <Package className="w-5 h-5" /> Gestión de Pedidos
+                </h2>
+                <p className="text-sm text-foreground/50 mb-6">
+                  {orders.length} pedido{orders.length !== 1 ? 's' : ''} en total · {pendingCount} pendiente{pendingCount !== 1 ? 's' : ''}
+                </p>
+
+                {orders.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-center text-foreground/40">
+                    <Package className="w-12 h-12 mb-3" />
+                    <p className="font-medium">No hay pedidos todavía</p>
+                    <p className="text-sm mt-1">Aparecerán aquí en tiempo real cuando los clientes compren.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {orders.map(order => {
+                      const shortId = order.id?.slice(-6).toUpperCase() ?? '------';
+                      const date = new Date(order.createdAt).toLocaleDateString('es-AR', {
+                        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                      });
+                      const isUpdating = updatingOrderId === order.id;
+
+                      return (
+                        <div key={order.id} className="bg-white/60 dark:bg-black/20 rounded-2xl border border-black/5 dark:border-white/5 overflow-hidden">
+                          {/* Header */}
+                          <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-b border-black/5 dark:border-white/5 bg-black/5 dark:bg-white/5">
+                            <div className="flex items-center gap-3">
+                              <div className="text-xl font-black font-display text-primary-600 dark:text-primary-400">#{shortId}</div>
+                              <div>
+                                <p className="text-xs text-foreground/50">{date}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${STATUS_COLORS[order.status]}`}>
+                                {STATUS_LABELS[order.status]}
+                              </span>
+                              {/* Selector de estado */}
+                              <div className="relative">
+                                <select
+                                  value={order.status}
+                                  disabled={isUpdating}
+                                  onChange={e => handleStatusChange(order.id!, e.target.value as OrderStatus)}
+                                  className="pl-3 pr-8 py-1.5 rounded-xl text-xs font-bold bg-white dark:bg-black/40 border border-black/10 dark:border-white/10 focus:ring-2 focus:ring-primary-500 outline-none transition-all appearance-none disabled:opacity-50 cursor-pointer"
+                                >
+                                  {(Object.keys(STATUS_LABELS) as OrderStatus[]).map(s => (
+                                    <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+                                  ))}
+                                </select>
+                                <ChevronDown className="w-3 h-3 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-foreground/40" />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Cuerpo */}
+                          <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                            {/* Cliente */}
+                            <div className="flex items-start gap-2">
+                              <User className="w-4 h-4 text-foreground/40 mt-0.5 flex-shrink-0" />
+                              <div>
+                                <p className="font-bold">{order.userName}</p>
+                                <p className="text-foreground/50 text-xs">{order.userEmail}</p>
+                                {order.userPhone && <p className="text-foreground/50 text-xs">{order.userPhone}</p>}
+                              </div>
+                            </div>
+
+                            {/* Entrega */}
+                            <div className="flex items-start gap-2">
+                              <MapPin className="w-4 h-4 text-foreground/40 mt-0.5 flex-shrink-0" />
+                              <div>
+                                <p className="font-bold">{order.deliveryType === 'retiro' ? 'Retiro en vivero' : 'Envío a domicilio'}</p>
+                                <p className="text-foreground/50 text-xs">{order.address}</p>
+                              </div>
+                            </div>
+
+                            {/* Productos */}
+                            <div className="md:col-span-2">
+                              <p className="text-xs font-bold uppercase tracking-wider text-foreground/40 mb-2">Productos</p>
+                              <div className="flex flex-wrap gap-2">
+                                {order.items.map((item, i) => (
+                                  <div key={i} className="flex items-center gap-1.5 bg-black/5 dark:bg-white/5 rounded-xl px-2.5 py-1.5">
+                                    <img src={item.image} alt={item.name} className="w-6 h-6 rounded-lg object-cover" />
+                                    <span className="text-xs font-medium">{item.name} × {item.quantity}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Footer de la card */}
+                            <div className="md:col-span-2 flex items-center justify-between pt-2 border-t border-black/5 dark:border-white/5">
+                              <div>
+                                <p className="text-xs text-foreground/40">Total</p>
+                                <p className="font-black text-lg text-primary-600 dark:text-primary-400">${order.total.toLocaleString('es-AR')}</p>
+                              </div>
+                              <div className="flex gap-2">
+                                {order.notes && (
+                                  <span className="text-xs bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 px-2.5 py-1 rounded-lg border border-amber-200/50">
+                                    📝 {order.notes}
+                                  </span>
+                                )}
+                                <a
+                                  href={`https://wa.me/${order.userPhone?.replace(/\D/g,'') || ''}?text=${encodeURIComponent(`Hola ${order.userName}! Tu pedido #${shortId} del Vivero Libertad `)}`}
+                                  target="_blank" rel="noreferrer"
+                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#25D366] hover:bg-[#20bd5a] text-white text-xs font-bold rounded-xl transition-colors"
+                                >
+                                  <MessageCircle className="w-3.5 h-3.5" /> Contactar
+                                </a>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <form onSubmit={activeTab !== '📋 Batch JSON' && activeTab !== '📦 Inventario' && activeTab !== '📬 Pedidos' ? handleSubmit : undefined}>
               
               {/* TAB 0: INVENTARIO */}
               <div className={activeTab === '📦 Inventario' ? 'block' : 'hidden'}>

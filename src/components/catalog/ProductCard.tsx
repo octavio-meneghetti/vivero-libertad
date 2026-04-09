@@ -1,25 +1,60 @@
-import { ShoppingBag } from 'lucide-react';
+'use client';
+
+import { Heart, ShoppingBag } from 'lucide-react';
 import Link from 'next/link';
+import { useAuth } from '@/context/AuthContext';
+import { useFavorites } from '@/context/FavoritesContext';
+import { useRouter } from 'next/navigation';
 
 interface ProductCardProps {
   product: any;
 }
 
 export default function ProductCard({ product }: ProductCardProps) {
-  // Manejo de imágen (soporta tanto los del JSON viejo como los nuevos de Firestore)
-  const productImg = product.imageUrl || product.image || 'https://images.unsplash.com/photo-1416879598553-380108ff4bca?q=80&w=800&auto=format&fit=crop';
+  const { user } = useAuth();
+  const { isFavorite, toggleFavorite } = useFavorites();
+  const router = useRouter();
+
+  const productImg = product.imageUrl || product.image
+    || 'https://images.unsplash.com/photo-1416879598553-380108ff4bca?q=80&w=800&auto=format&fit=crop';
+
+  const faved = isFavorite(product.id);
+
+  const handleFavorite = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!user) { router.push('/login'); return; }
+    toggleFavorite(product);
+  };
 
   return (
-    <Link href={`/producto/${product.id}`} className="group rounded-3xl border border-black/5 dark:border-white/5 bg-white/50 dark:bg-slate-900/40 backdrop-blur-md overflow-hidden hover:shadow-2xl hover:shadow-primary-500/10 hover:-translate-y-1 transition-all duration-300 block">
+    <Link
+      href={`/producto/${product.id}`}
+      className="group rounded-3xl border border-black/5 dark:border-white/5 bg-white/50 dark:bg-slate-900/40 backdrop-blur-md overflow-hidden hover:shadow-2xl hover:shadow-primary-500/10 hover:-translate-y-1 transition-all duration-300 block"
+    >
       <div className="relative aspect-[4/5] overflow-hidden bg-black/5 dark:bg-white/5">
         {product.badge && (
           <div className="absolute top-4 left-4 z-10 px-3 py-1 rounded-full bg-white/90 dark:bg-slate-900/90 text-xs font-bold text-primary-600 dark:text-primary-400 shadow-sm backdrop-blur-md">
             {product.badge}
           </div>
         )}
+
+        {/* Botón favorito */}
+        <button
+          onClick={handleFavorite}
+          className={`absolute top-3 right-3 z-20 w-9 h-9 rounded-xl flex items-center justify-center shadow-lg backdrop-blur-sm transition-all hover:scale-110 ${
+            faved
+              ? 'bg-red-500 text-white'
+              : 'bg-white/80 dark:bg-black/50 text-foreground/50 hover:text-red-500'
+          }`}
+          title={faved ? 'Quitar de favoritas' : 'Agregar a favoritas'}
+        >
+          <Heart className={`w-4 h-4 transition-all ${faved ? 'fill-current scale-110' : ''}`} />
+        </button>
+
         <div className="absolute inset-0 bg-black/10 dark:bg-black/20 group-hover:bg-transparent transition-colors z-0" />
-        <img 
-          src={productImg} 
+        <img
+          src={productImg}
           alt={product.name}
           className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
         />
