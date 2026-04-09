@@ -24,7 +24,32 @@ export default function PlantARViewer({ modelUrl, posterUrl, onClose, productNam
 
   useEffect(() => {
     setMounted(true);
-  }, []);
+    console.log(`[AR-DEBUG] Componente montado para: ${productName}`);
+    console.log(`[AR-DEBUG] Intentando cargar URL: ${modelUrl}`);
+    
+    // Verificar si el script de model-viewer existe
+    const script = document.querySelector('script[src*="model-viewer"]');
+    console.log(`[AR-DEBUG] Estado del script model-viewer: ${script ? 'Presente' : 'NO ENCONTRADO'}`);
+  }, [modelUrl, productName]);
+
+  const handleModelLoad = () => {
+    console.log(`[AR-DEBUG] ✅ Modelo cargado exitosamente: ${productName}`);
+  };
+
+  const handleModelError = (event: any) => {
+    console.error(`[AR-DEBUG] ❌ ERROR al cargar el modelo:`, event.detail);
+    // Intentar diagnosticar CORS
+    if (!event.detail.url) {
+        console.warn(`[AR-DEBUG] Pista: Si el error es un objeto vacío, suele ser un bloqueo de CORS o red.`);
+    }
+  };
+
+  const handleModelProgress = (event: any) => {
+    const progress = Math.round(event.detail.totalProgress * 100);
+    if (progress % 20 === 0) { // Loguear cada 20% para no saturar
+        console.log(`[AR-DEBUG] Progreso de descarga: ${progress}%`);
+    }
+  };
 
   if (!mounted) return null;
 
@@ -37,7 +62,7 @@ export default function PlantARViewer({ modelUrl, posterUrl, onClose, productNam
           <div>
             <h3 className="text-white font-display font-bold text-xl">{productName}</h3>
             <p className="text-white/60 text-xs flex items-center gap-2">
-              <Box className="w-3 h-3" /> Visualización 3D & AR
+              <Box className="w-3 h-3" /> Visualización 3D & AR (Debug Active)
             </p>
           </div>
           
@@ -62,6 +87,9 @@ export default function PlantARViewer({ modelUrl, posterUrl, onClose, productNam
             shadow-intensity="1"
             exposure="1"
             touch-action="pan-y"
+            onLoad={handleModelLoad}
+            onError={handleModelError}
+            onProgress={handleModelProgress}
             style={{ width: '100%', height: '100%', '--poster-color': 'transparent' } as any}
           >
             {/* Botón de AR específico de model-viewer (aparece en móviles compatibles) */}
@@ -82,7 +110,7 @@ export default function PlantARViewer({ modelUrl, posterUrl, onClose, productNam
         {/* Footer con Instrucciones */}
         <div className="p-8 text-center bg-gradient-to-t from-black/50 to-transparent">
           <p className="text-white/50 text-xs max-w-xs mx-auto">
-            Girá con un dedo, hacé zoom con dos. En móviles compatibles, usá el botón azul para proyectar la planta en tu casa.
+            [Debug] Revisa la consola del navegador para ver detalles técnicos de la carga.
           </p>
         </div>
       </div>
